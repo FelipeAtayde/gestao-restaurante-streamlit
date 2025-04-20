@@ -2,13 +2,14 @@ import streamlit as st
 import pandas as pd
 import unidecode
 from io import BytesIO
+import re
 
 st.set_page_config(page_title="Gestão de Restaurante", layout="wide")
-st.title("📊 Sistema de Gestão de Restaurante")
+st.title("\U0001F4CA Sistema de Gestão de Restaurante")
 
 # ========================== ANÁLISE DE CONSUMO ==========================
 
-st.header("📦 Análise de Consumo de Estoque")
+st.header("\U0001F4E6 Análise de Consumo de Estoque")
 file_consumo = st.file_uploader("Faça upload da planilha de CONSUMO", type=["xlsx"], key="consumo")
 
 if file_consumo:
@@ -33,14 +34,16 @@ if file_consumo:
                 df["item"] = df["item"].astype(str).str.lower().str.strip()
                 df["quantidade"] = pd.to_numeric(df["quantidade"], errors="coerce").fillna(0)
 
-                df["valor total"] = (
-                    df["valor total"]
-                    .astype(str)
-                    .str.replace(r"[^\d,.-]", "", regex=True)
-                    .str.replace(".", "", regex=False)
-                    .str.replace(",", ".", regex=False)
-                )
-                df["valor total"] = pd.to_numeric(df["valor total"], errors="coerce").fillna(0)
+                def ajustar_valor(valor):
+                    valor = str(valor).replace("R$", "").replace(" ", "").strip()
+                    if "," in valor and "." in valor:
+                        valor = re.sub(r"\\.", "", valor)
+                        valor = valor.replace(",", ".")
+                    elif "," in valor:
+                        valor = valor.replace(",", ".")
+                    return pd.to_numeric(valor, errors="coerce")
+
+                df["valor total"] = df["valor total"].apply(ajustar_valor).fillna(0)
 
                 return df.groupby("item", as_index=False)[["quantidade", "valor total"]].sum()
 
@@ -64,7 +67,7 @@ if file_consumo:
                 cor = 'color: red; font-weight: bold' if val.name < 5 else ''
                 return [cor] * len(val)
 
-            st.subheader("📦 Relatório de Consumo de Insumos")
+            st.subheader("\U0001F4E6 Relatório de Consumo de Insumos")
             st.dataframe(
                 resultado.style
                     .apply(destacar_top_5, axis=1)
@@ -77,14 +80,14 @@ if file_consumo:
 
             excel_consumo = BytesIO()
             resultado.to_excel(excel_consumo, index=False, engine='openpyxl')
-            st.download_button("📅 Baixar Consumo de Estoque (.xlsx)", data=excel_consumo.getvalue(), file_name="analise_consumo_estoque.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+            st.download_button("\U0001F4C5 Baixar Consumo de Estoque (.xlsx)", data=excel_consumo.getvalue(), file_name="analise_consumo_estoque.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
     except Exception as e:
         st.error(f"Erro ao processar a planilha de consumo: {e}")
 
 # ========================== ANÁLISE DE VENDAS ==========================
 
-st.header("🍽️ Análise de Maiores Vendas")
+st.header("\U0001F37D️ Análise de Maiores Vendas")
 file_vendas = st.file_uploader("Faça upload da planilha de VENDAS", type=["xlsx"], key="vendas")
 
 def normalizar(texto):
@@ -174,9 +177,9 @@ if file_vendas:
     st.write(f"Grande: {total_g}")
     st.write(f"Total: {total_geral}")
 
-    st.subheader("📋 Resumo Final Agrupado")
+    st.subheader("\U0001F4CB Resumo Final Agrupado")
     st.dataframe(resumo_df, use_container_width=True)
 
     excel_vendas = BytesIO()
     resumo_df.to_excel(excel_vendas, index=False, engine='openpyxl')
-    st.download_button("📅 Baixar Análise de Vendas (.xlsx)", data=excel_vendas.getvalue(), file_name="analise_maiores_vendas.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+    st.download_button("\U0001F4C5 Baixar Análise de Vendas (.xlsx)", data=excel_vendas.getvalue(), file_name="analise_maiores_vendas.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
