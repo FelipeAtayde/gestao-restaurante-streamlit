@@ -35,7 +35,7 @@ if file_consumo:
                 df["quantidade"] = pd.to_numeric(df["quantidade"], errors="coerce").fillna(0)
 
                 def ajustar_valor(valor):
-                    """ Função que ajusta o valor monetário para float """
+                    """ Função que ajusta o valor monetário para float com controle de precisão """
                     if pd.isna(valor):
                         return 0.0
                     valor = str(valor)
@@ -45,7 +45,8 @@ if file_consumo:
                     else:
                         valor = valor.replace(",", "")  # Remove a vírgula caso seja separador de milhar
                     try:
-                        return float(valor)
+                        # Garantir que o valor é um número flutuante
+                        return round(float(valor), 2)
                     except:
                         return 0.0
 
@@ -189,4 +190,3 @@ if file_vendas:
 
     except Exception as e:
         st.error(f"Erro ao processar a planilha de vendas: {e}")
-
