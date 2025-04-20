@@ -43,9 +43,9 @@ if file_consumo:
                     if pd.isna(valor):
                         return 0.0
                     valor = str(valor)
-                    valor = re.sub(r"[^\d,]", "", valor)
+                    valor = re.sub(r"[^\d,]", "", valor)  # Remover qualquer caractere não numérico
                     if valor.count(",") == 1:
-                        valor = valor.replace(",", ".")
+                        valor = valor.replace(",", ".")  # Substituir vírgula por ponto
                     else:
                         valor = valor.replace(",", "")
                     try:
