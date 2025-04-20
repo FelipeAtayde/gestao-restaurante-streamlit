@@ -13,48 +13,42 @@ file_consumo = st.file_uploader("Faça upload da planilha de CONSUMO", type=["xl
 if file_consumo:
     try:
         # Leitura da planilha de consumo
-        df = pd.read_excel(file_consumo)
+        df = pd.read_excel(file_consumo, header=None)  # Carregar sem cabeçalho
 
-        # Exibe as informações da planilha
-        st.write("Número de colunas:", len(df.columns))
-        st.write("Cabeçalho da planilha:", df.columns)
+        # Verificando as primeiras linhas da planilha
+        st.write(df.head())
 
-        # Verificando se a planilha tem o número de colunas esperado (14 colunas)
-        if len(df.columns) != 14:
-            st.error(f"Erro: A planilha precisa ter 14 colunas, mas ela tem {len(df.columns)} colunas.")
-        else:
-            # Nomeação das colunas para facilitar o manuseio
-            df.columns = ['item_inicial', 'quantidade_inicial', 'valor_unitario_inicial', 'valor_total_inicial',
-                          'item_compras', 'quantidade_compras', 'valor_unitario_compras', 'valor_total_compras',
-                          'item_final', 'quantidade_final', 'valor_unitario_final', 'valor_total_final', 'coluna_extra_1', 'coluna_extra_2']
+        # Renomeando as colunas com base na estrutura que você forneceu
+        df.columns = [
+            "ITEM", "QUANTIDADE_INICIAL", "VALOR_UNITARIO_INICIAL", "VALOR_TOTAL_INICIAL",  # Colunas do estoque inicial
+            "ITEM_COMPRAS", "QUANTIDADE_COMPRAS", "VALOR_UNITARIO_COMPRAS", "VALOR_TOTAL_COMPRAS",  # Colunas de compras
+            "ITEM_FINAL", "QUANTIDADE_FINAL", "VALOR_UNITARIO_FINAL", "VALOR_TOTAL_FINAL"  # Colunas do estoque final
+        ]
 
-            # Limpando os dados
-            df['item_inicial'] = df['item_inicial'].astype(str).str.strip()
-            df['item_compras'] = df['item_compras'].astype(str).str.strip()
-            df['item_final'] = df['item_final'].astype(str).str.strip()
+        # Agora, vamos remover linhas em branco e garantir que o processamento seja feito com números
+        df = df.dropna(how="all")
 
-            # Agrupando itens e somando as quantidades e valores totais
-            df_grouped = df.groupby('item_inicial', as_index=False).agg({
-                'quantidade_inicial': 'sum',
-                'valor_total_inicial': 'sum',
-                'quantidade_compras': 'sum',
-                'valor_total_compras': 'sum',
-                'quantidade_final': 'sum',
-                'valor_total_final': 'sum'
-            })
+        # Convertendo valores numéricos para garantir que podemos realizar cálculos
+        df["QUANTIDADE_INICIAL"] = pd.to_numeric(df["QUANTIDADE_INICIAL"], errors="coerce").fillna(0)
+        df["VALOR_TOTAL_INICIAL"] = pd.to_numeric(df["VALOR_TOTAL_INICIAL"], errors="coerce").fillna(0)
+        df["QUANTIDADE_COMPRAS"] = pd.to_numeric(df["QUANTIDADE_COMPRAS"], errors="coerce").fillna(0)
+        df["VALOR_TOTAL_COMPRAS"] = pd.to_numeric(df["VALOR_TOTAL_COMPRAS"], errors="coerce").fillna(0)
+        df["QUANTIDADE_FINAL"] = pd.to_numeric(df["QUANTIDADE_FINAL"], errors="coerce").fillna(0)
+        df["VALOR_TOTAL_FINAL"] = pd.to_numeric(df["VALOR_TOTAL_FINAL"], errors="coerce").fillna(0)
 
-            # Calculando o consumo
-            df_grouped['quant_consumo'] = df_grouped['quantidade_inicial'] + df_grouped['quantidade_compras'] - df_grouped['quantidade_final']
-            df_grouped['total_consumo'] = df_grouped['valor_total_inicial'] + df_grouped['valor_total_compras'] - df_grouped['valor_total_final']
+        # Calculando o consumo
+        df["QUANT_CONSUMO"] = df["QUANTIDADE_INICIAL"] + df["QUANTIDADE_COMPRAS"] - df["QUANTIDADE_FINAL"]
+        df["TOTAL_CONSUMO"] = df["VALOR_TOTAL_INICIAL"] + df["VALOR_TOTAL_COMPRAS"] - df["VALOR_TOTAL_FINAL"]
 
-            # Exibindo o resultado
-            st.subheader("📊 Relatório de Consumo de Insumos")
-            st.dataframe(df_grouped[['item_inicial', 'quant_consumo', 'total_consumo']], use_container_width=True)
+        # Exibindo o relatório de consumo
+        st.subheader("📊 Relatório de Consumo de Insumos")
+        df_resultado = df[["ITEM", "QUANT_CONSUMO", "TOTAL_CONSUMO"]]
+        st.dataframe(df_resultado, use_container_width=True)
 
-            # Baixar o arquivo de consumo
-            excel_consumo = BytesIO()
-            df_grouped.to_excel(excel_consumo, index=False, engine='openpyxl')
-            st.download_button("💾 Baixar Relatório de Consumo (.xlsx)", data=excel_consumo.getvalue(), file_name="relatorio_consumo.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+        # Baixar o arquivo de consumo
+        excel_consumo = BytesIO()
+        df_resultado.to_excel(excel_consumo, index=False, engine='openpyxl')
+        st.download_button("💾 Baixar Relatório de Consumo (.xlsx)", data=excel_consumo.getvalue(), file_name="relatorio_consumo.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
     except Exception as e:
         st.error(f"Erro ao processar a planilha de consumo: {e}")
