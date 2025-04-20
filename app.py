@@ -1,14 +1,15 @@
-import streamlit as st
 import pandas as pd
 import re
+import streamlit as st
 from io import BytesIO
 import unidecode
 
+# ========================== CONFIGURAÇÕES DA PÁGINA ==========================
 st.set_page_config(page_title="Gestão de Restaurante", layout="wide")
 st.title("📊 Sistema de Gestão de Restaurante")
 
-# ========================== ANÁLISE DE CONSUMO ==========================
-st.header("\U0001F4E6 Análise de Consumo de Estoque")
+# ========================== AGENTE DE CONSUMO ==========================
+st.header("📦 Análise de Consumo de Estoque")
 file_consumo = st.file_uploader("Faça upload da planilha de CONSUMO", type=["xlsx"], key="consumo")
 
 if file_consumo:
@@ -16,48 +17,50 @@ if file_consumo:
         df = pd.read_excel(file_consumo)
         df = df.dropna(how="all")
 
+        # Validação do formato da planilha
         if df.shape[1] < 12:
             st.error("⚠️ A planilha precisa conter as 3 seções (Estoque Inicial, Compras e Estoque Final) lado a lado.")
         else:
-            # Separando os dados conforme as colunas
+            # Separando as colunas de estoque, compras e estoque final
             ini = df.iloc[:, :4].copy()
             compras = df.iloc[:, 4:8].copy()
             fim = df.iloc[:, 8:12].copy()
 
+            # Renomeando as colunas
             ini.columns = compras.columns = fim.columns = ["item", "quantidade", "valor unitario", "valor total"]
             ini = ini.dropna(subset=["item"])
             compras = compras.dropna(subset=["item"])
             fim = fim.dropna(subset=["item"])
 
+            # Função para limpar os dados
             def limpar(df):
                 df = df.copy()
                 df["item"] = df["item"].astype(str).str.lower().str.strip()
                 df["quantidade"] = pd.to_numeric(df["quantidade"], errors="coerce").fillna(0)
 
                 def ajustar_valor(valor):
-                    """ Função que ajusta o valor monetário para float com controle de precisão """
                     if pd.isna(valor):
                         return 0.0
                     valor = str(valor)
-                    valor = re.sub(r"[^\d,]", "", valor)  # Remove caracteres não numéricos
+                    valor = re.sub(r"[^\d,]", "", valor)
                     if valor.count(",") == 1:
-                        valor = valor.replace(",", ".")  # Troca vírgula por ponto
+                        valor = valor.replace(",", ".")
                     else:
-                        valor = valor.replace(",", "")  # Remove a vírgula caso seja separador de milhar
+                        valor = valor.replace(",", "")
                     try:
-                        # Garantir que o valor é um número flutuante
-                        return round(float(valor), 2)
+                        return float(valor)
                     except:
                         return 0.0
 
                 df["valor total"] = df["valor total"].apply(ajustar_valor).fillna(0)
                 return df.groupby("item", as_index=False).agg({"quantidade": "sum", "valor total": "sum"})
 
+            # Aplicando limpeza
             ini = limpar(ini)
             compras = limpar(compras)
             fim = limpar(fim)
 
-            # Merge dos dados de estoque inicial, compras e final
+            # Mesclando os dados
             base = pd.merge(ini, compras, on="item", how="outer", suffixes=("_ini", "_ent"))
             base = pd.merge(base, fim, on="item", how="outer")
             base = base.rename(columns={"quantidade": "quant_fim", "valor total": "total_fim"})
@@ -70,11 +73,12 @@ if file_consumo:
             resultado = resultado[resultado["quant_consumo"] > 0]
             resultado = resultado.sort_values(by="total_consumo", ascending=False).reset_index(drop=True)
 
+            # Exibindo o resultado da análise de consumo
             def destacar_top_5(val):
                 cor = 'color: red; font-weight: bold' if val.name < 5 else ''
                 return [cor] * len(val)
 
-            st.subheader("\U0001F4E6 Relatório de Consumo de Insumos")
+            st.subheader("📦 Relatório de Consumo de Insumos")
             st.dataframe(
                 resultado.style
                     .apply(destacar_top_5, axis=1)
@@ -85,15 +89,17 @@ if file_consumo:
                 use_container_width=True
             )
 
+            # Baixar o relatório em Excel
             excel_consumo = BytesIO()
             resultado.to_excel(excel_consumo, index=False, engine='openpyxl')
-            st.download_button("\U0001F4C5 Baixar Consumo de Estoque (.xlsx)", data=excel_consumo.getvalue(), file_name="analise_consumo_estoque.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+            st.download_button("📥 Baixar Consumo de Estoque (.xlsx)", data=excel_consumo.getvalue(), file_name="analise_consumo_estoque.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
     except Exception as e:
         st.error(f"Erro ao processar a planilha de consumo: {e}")
 
-# ========================== ANÁLISE DE VENDAS ==========================
-st.header("\U0001F37D️ Análise de Maiores Vendas")
+
+# ========================== AGENTE DE VENDAS ==========================
+st.header("🍽️ Análise de Maiores Vendas")
 file_vendas = st.file_uploader("Faça upload da planilha de VENDAS", type=["xlsx"], key="vendas")
 
 if file_vendas:
@@ -176,17 +182,18 @@ if file_vendas:
         resumo_df["Valor Num"] = resumo_df["Valor Total"].str.replace("R\$ ", "", regex=True).str.replace(".", "", regex=False).str.replace(",", ".", regex=False).astype(float)
         resumo_df = resumo_df.sort_values(by="Valor Num", ascending=False).drop(columns="Valor Num")
 
-        st.subheader("Resumo de Pequenos e Grandes")
+        # Exibindo o resumo de vendas
+        st.subheader("📊 Resumo Final Agrupado de Vendas")
         st.write(f"Pequeno: {total_p}")
         st.write(f"Grande: {total_g}")
         st.write(f"Total: {total_geral}")
 
-        st.subheader("\U0001F4CB Resumo Final Agrupado")
         st.dataframe(resumo_df, use_container_width=True)
 
+        # Baixar o relatório em Excel
         excel_vendas = BytesIO()
         resumo_df.to_excel(excel_vendas, index=False, engine='openpyxl')
-        st.download_button("\U0001F4C5 Baixar Análise de Vendas (.xlsx)", data=excel_vendas.getvalue(), file_name="analise_maiores_vendas.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+        st.download_button("📥 Baixar Análise de Vendas (.xlsx)", data=excel_vendas.getvalue(), file_name="analise_maiores_vendas.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
     except Exception as e:
         st.error(f"Erro ao processar a planilha de vendas: {e}")
