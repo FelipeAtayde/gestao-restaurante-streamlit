@@ -88,7 +88,6 @@ if file_consumo:
     except Exception as e:
         st.error(f"Erro ao processar a planilha de consumo: {e}")
 
-
 # ========================== ANÁLISE DE VENDAS ==========================
 st.header("\U0001F37D️ Análise de Maiores Vendas")
 file_vendas = st.file_uploader("Faça upload da planilha de VENDAS", type=["xlsx"], key="vendas")
