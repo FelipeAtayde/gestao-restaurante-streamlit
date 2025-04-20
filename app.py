@@ -71,6 +71,3 @@ if file_consumo:
 
     except Exception as e:
         st.error(f"Erro ao processar a planilha de consumo: {e}")
-
-# ========================== ANÁLISE DE VENDAS ==========================
-# (A parte de vendas permanece a mesma e já está no código)
