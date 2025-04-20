@@ -4,26 +4,25 @@ import unidecode
 from io import BytesIO
 import re
 
-# Função para formatar os valores como "R$"
-def formatar_valor(valor):
-    return f"R$ {valor:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+st.set_page_config(page_title="Gestão de Restaurante", layout="wide")
+st.title("\U0001F4CA Sistema de Gestão de Restaurante")
 
 # ========================== ANÁLISE DE CONSUMO ==========================
-st.set_page_config(page_title="Gestão de Restaurante", layout="wide")
-st.title("📊 Sistema de Gestão de Restaurante")
 
-st.header("📦 Análise de Consumo de Estoque")
+st.header("\U0001F4E6 Análise de Consumo de Estoque")
 file_consumo = st.file_uploader("Faça upload da planilha de CONSUMO", type=["xlsx"], key="consumo")
 
 if file_consumo:
     try:
+        # Leitura da planilha
         df = pd.read_excel(file_consumo)
-        df = df.dropna(how="all")
+        df = df.dropna(how="all")  # Remover linhas com valores nulos
 
+        # Verifica se a planilha possui 12 colunas
         if df.shape[1] < 12:
             st.error("⚠️ A planilha precisa conter as 3 seções (Estoque Inicial, Compras e Estoque Final) lado a lado.")
         else:
-            # Dividindo as seções da planilha
+            # Organizando as colunas
             ini = df.iloc[:, :4].copy()
             compras = df.iloc[:, 4:8].copy()
             fim = df.iloc[:, 8:12].copy()
@@ -33,12 +32,13 @@ if file_consumo:
             compras = compras.dropna(subset=["item"])
             fim = fim.dropna(subset=["item"])
 
-            # Função de limpeza e formatação
+            # Função para limpar e ajustar os dados
             def limpar(df):
                 df = df.copy()
                 df["item"] = df["item"].astype(str).str.lower().str.strip()
                 df["quantidade"] = pd.to_numeric(df["quantidade"], errors="coerce").fillna(0)
 
+                # Função para ajustar valor total
                 def ajustar_valor(valor):
                     if pd.isna(valor):
                         return 0.0
@@ -53,13 +53,17 @@ if file_consumo:
                     except:
                         return 0.0
 
+                # Aplicando a função de ajustar valor total
                 df["valor total"] = df["valor total"].apply(ajustar_valor).fillna(0)
+                # Agrupando e somando os valores
                 return df.groupby("item", as_index=False).agg({"quantidade": "sum", "valor total": "sum"})
 
+            # Limpando os dados para cada seção
             ini = limpar(ini)
             compras = limpar(compras)
             fim = limpar(fim)
 
+            # Unificando os dados
             base = pd.merge(ini, compras, on="item", how="outer", suffixes=("_ini", "_ent"))
             base = pd.merge(base, fim, on="item", how="outer")
             base = base.rename(columns={"quantidade": "quant_fim", "valor total": "total_fim"})
@@ -68,52 +72,57 @@ if file_consumo:
             base["quant_consumo"] = base["quantidade_ini"] + base["quantidade_ent"] - base["quant_fim"]
             base["total_consumo"] = base["valor total_ini"] + base["valor total_ent"] - base["total_fim"]
 
+            # Filtrando os resultados e ordenando
             resultado = base[["item", "quant_consumo", "total_consumo"]]
             resultado = resultado[resultado["quant_consumo"] > 0]
             resultado = resultado.sort_values(by="total_consumo", ascending=False).reset_index(drop=True)
 
+            # Destacando os 5 itens com maior consumo
             def destacar_top_5(val):
                 cor = 'color: red; font-weight: bold' if val.name < 5 else ''
                 return [cor] * len(val)
 
-            st.subheader("📊 Relatório de Consumo de Insumos")
+            # Exibindo o relatório
+            st.subheader("\U0001F4E6 Relatório de Consumo de Insumos")
             st.dataframe(
                 resultado.style
                     .apply(destacar_top_5, axis=1)
                     .format({
                         "quant_consumo": "{:.2f}",
-                        "total_consumo": lambda x: formatar_valor(x)
+                        "total_consumo": lambda x: f"R$ {x:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
                     }),
                 use_container_width=True
             )
 
+            # Função para download do resultado
             excel_consumo = BytesIO()
             resultado.to_excel(excel_consumo, index=False, engine='openpyxl')
-            st.download_button("📥 Baixar Consumo de Estoque (.xlsx)", data=excel_consumo.getvalue(), file_name="analise_consumo_estoque.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+            st.download_button("\U0001F4C5 Baixar Consumo de Estoque (.xlsx)", data=excel_consumo.getvalue(), file_name="analise_consumo_estoque.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
     except Exception as e:
         st.error(f"Erro ao processar a planilha de consumo: {e}")
 
 # ========================== ANÁLISE DE VENDAS ==========================
-st.header("🍽️ Análise de Maiores Vendas")
+
+st.header("\U0001F37D️ Análise de Maiores Vendas")
 file_vendas = st.file_uploader("Faça upload da planilha de VENDAS", type=["xlsx"], key="vendas")
 
 if file_vendas:
     try:
-        df_vendas = pd.read_excel(file_vendas, skiprows=3)
-        df_vendas["Itens e Opções"] = df_vendas["Itens e Opções"].astype(str).apply(lambda x: unidecode.unidecode(x).lower().strip())
+        df = pd.read_excel(file_vendas, skiprows=3)
+        df["Itens e Opções"] = df["Itens e Opções"].astype(str).apply(lambda x: unidecode.unidecode(x).lower().strip())
 
         mult = {
             "- 2 pequenos": 2, "- 3 pequenos": 3, "- 4 pequenos": 4,
             "- 2 grandes": 2, "- 3 grandes": 3, "- 4 grandes": 4
         }
         for k, m in mult.items():
-            df_vendas.loc[df_vendas["Itens e Opções"].str.contains(k), "Quantidade"] *= m
+            df.loc[df["Itens e Opções"].str.contains(k), "Quantidade"] *= m
 
-        pequeno = df_vendas["Itens e Opções"].str.contains("pequeno") & ~df_vendas["Itens e Opções"].str.contains("combo")
-        grande = df_vendas["Itens e Opções"].str.contains("grande") & ~df_vendas["Itens e Opções"].str.contains("combo")
-        total_p = int(df_vendas.loc[pequeno, "Quantidade"].sum())
-        total_g = int(df_vendas.loc[grande, "Quantidade"].sum())
+        pequeno = df["Itens e Opções"].str.contains("pequeno") & ~df["Itens e Opções"].str.contains("combo")
+        grande = df["Itens e Opções"].str.contains("grande") & ~df["Itens e Opções"].str.contains("combo")
+        total_p = int(df.loc[pequeno, "Quantidade"].sum())
+        total_g = int(df.loc[grande, "Quantidade"].sum())
         total_geral = total_p + total_g
 
         pratos = {
@@ -154,23 +163,23 @@ if file_vendas:
 
         resumo = []
         for nome, cond in pratos.items():
-            f = df_vendas["Itens e Opções"].apply(cond)
-            qtd = int(df_vendas.loc[f, "Quantidade"].sum())
-            val = df_vendas.loc[f, "Valor Total"].sum()
+            f = df["Itens e Opções"].apply(cond)
+            qtd = int(df.loc[f, "Quantidade"].sum())
+            val = df.loc[f, "Valor Total"].sum()
             if qtd > 0:
                 resumo.append({"Categoria": nome, "Quantidade": qtd, "Valor Total": f"R$ {val:,.2f}".replace(".", "X").replace(",", ".").replace("X", ",")})
 
         for nome, cond in combos.items():
-            f = df_vendas["Itens e Opções"].apply(cond)
-            qtd = int(df_vendas.loc[f, "Quantidade"].sum())
-            val = df_vendas.loc[f, "Valor Total"].sum()
+            f = df["Itens e Opções"].apply(cond)
+            qtd = int(df.loc[f, "Quantidade"].sum())
+            val = df.loc[f, "Valor Total"].sum()
             if qtd > 0:
                 resumo.append({"Categoria": nome, "Quantidade": qtd, "Valor Total": f"R$ {val:,.2f}".replace(".", "X").replace(",", ".").replace("X", ",")})
 
         for nome, tags in refrigerantes.items():
-            f = df_vendas["Itens e Opções"].apply(lambda x: contem_tags(x, tags))
-            qtd = int(df_vendas.loc[f, "Quantidade"].sum())
-            val = df_vendas.loc[f, "Valor Total"].sum()
+            f = df["Itens e Opções"].apply(lambda x: contem_tags(x, tags))
+            qtd = int(df.loc[f, "Quantidade"].sum())
+            val = df.loc[f, "Valor Total"].sum()
             if qtd > 0:
                 resumo.append({"Categoria": nome, "Quantidade": qtd, "Valor Total": f"R$ {val:,.2f}".replace(".", "X").replace(",", ".").replace("X", ",")})
 
@@ -178,17 +187,18 @@ if file_vendas:
         resumo_df["Valor Num"] = resumo_df["Valor Total"].str.replace("R\$ ", "", regex=True).str.replace(".", "", regex=False).str.replace(",", ".", regex=False).astype(float)
         resumo_df = resumo_df.sort_values(by="Valor Num", ascending=False).drop(columns="Valor Num")
 
-        st.subheader("📊 Resumo de Pequenos e Grandes")
+        st.subheader("Resumo de Pequenos e Grandes")
         st.write(f"Pequeno: {total_p}")
         st.write(f"Grande: {total_g}")
         st.write(f"Total: {total_geral}")
 
-        st.subheader("📋 Resumo Final Agrupado")
+        st.subheader("\U0001F4CB Resumo Final Agrupado")
         st.dataframe(resumo_df, use_container_width=True)
 
         excel_vendas = BytesIO()
         resumo_df.to_excel(excel_vendas, index=False, engine='openpyxl')
-        st.download_button("📥 Baixar Análise de Vendas (.xlsx)", data=excel_vendas.getvalue(), file_name="analise_maiores_vendas.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+        st.download_button("\U0001F4C5 Baixar Análise de Vendas (.xlsx)", data=excel_vendas.getvalue(), file_name="analise_maiores_vendas.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
     except Exception as e:
         st.error(f"Erro ao processar a planilha de vendas: {e}")
+
