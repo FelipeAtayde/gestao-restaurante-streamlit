@@ -201,4 +201,3 @@ if file_vendas:
 
     except Exception as e:
         st.error(f"Erro ao processar a planilha de vendas: {e}")
-
