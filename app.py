@@ -38,13 +38,10 @@ if file_consumo:
                     if pd.isna(valor):
                         return 0.0
                     valor = str(valor)
-                    valor = valor.replace("R$", "").replace(" ", "").replace("\xa0", "").replace("\u200b", "")
-                    valor = re.sub(r"[^\d,\.]", "", valor)
-                    if valor.count(",") == 1 and valor.count(".") == 0:
+                    valor = re.sub(r"[^\d,]", "", valor)
+                    if valor.count(",") == 1:
                         valor = valor.replace(",", ".")
-                    elif valor.count(".") > 1 and valor.count(",") == 1:
-                        valor = valor.replace(".", "").replace(",", ".")
-                    elif valor.count(",") > 1 and valor.count(".") == 1:
+                    else:
                         valor = valor.replace(",", "")
                     try:
                         return float(valor)
@@ -52,7 +49,7 @@ if file_consumo:
                         return 0.0
 
                 df["valor total"] = df["valor total"].apply(ajustar_valor).fillna(0)
-                return df.groupby("item", as_index=False)[["quantidade", "valor total"]].sum()
+                return df.groupby("item", as_index=False).agg({"quantidade": "sum", "valor total": "sum"})
 
             ini = limpar(ini)
             compras = limpar(compras)
@@ -94,28 +91,28 @@ if file_consumo:
 
 # ========================== ANÁLISE DE VENDAS ==========================
 
-st.header("\U0001F37D Análise de Maiores Vendas")
+st.header("\U0001F37D️ Análise de Maiores Vendas")
 file_vendas = st.file_uploader("Faça upload da planilha de VENDAS", type=["xlsx"], key="vendas")
 
 if file_vendas:
     try:
-        df_vendas = pd.read_excel(file_vendas, skiprows=3)
-        df_vendas["Itens e Opções"] = df_vendas["Itens e Opções"].astype(str).apply(lambda x: unidecode.unidecode(x).lower().strip())
+        df = pd.read_excel(file_vendas, skiprows=3)
+        df["Itens e Opções"] = df["Itens e Opções"].astype(str).apply(lambda x: unidecode.unidecode(x).lower().strip())
 
         mult = {
             "- 2 pequenos": 2, "- 3 pequenos": 3, "- 4 pequenos": 4,
             "- 2 grandes": 2, "- 3 grandes": 3, "- 4 grandes": 4
         }
         for k, m in mult.items():
-            df_vendas.loc[df_vendas["Itens e Opções"].str.contains(k), "Quantidade"] *= m
+            df.loc[df["Itens e Opções"].str.contains(k), "Quantidade"] *= m
 
-        pequeno = df_vendas["Itens e Opções"].str.contains("pequeno") & ~df_vendas["Itens e Opções"].str.contains("combo")
-        grande = df_vendas["Itens e Opções"].str.contains("grande") & ~df_vendas["Itens e Opções"].str.contains("combo")
-        total_p = int(df_vendas.loc[pequeno, "Quantidade"].sum())
-        total_g = int(df_vendas.loc[grande, "Quantidade"].sum())
+        pequeno = df["Itens e Opções"].str.contains("pequeno") & ~df["Itens e Opções"].str.contains("combo")
+        grande = df["Itens e Opções"].str.contains("grande") & ~df["Itens e Opções"].str.contains("combo")
+        total_p = int(df.loc[pequeno, "Quantidade"].sum())
+        total_g = int(df.loc[grande, "Quantidade"].sum())
         total_geral = total_p + total_g
 
-        categorias = {
+        pratos = {
             "Boi": lambda x: "boi" in x and "combo" not in x,
             "Parmegiana": lambda x: "parmegiana" in x and "combo" not in x,
             "Strogonoff": lambda x: "strogonoff" in x and "combo" not in x,
@@ -152,19 +149,29 @@ if file_vendas:
             return any(all(tag in texto for tag in tags) for tags in listas)
 
         resumo = []
-        for grupo in [categorias, combos, refrigerantes]:
-            for nome, cond in grupo.items():
-                if grupo is refrigerantes:
-                    f = df_vendas["Itens e Opções"].apply(lambda x: contem_tags(x, cond))
-                else:
-                    f = df_vendas["Itens e Opções"].apply(cond)
-                qtd = int(df_vendas.loc[f, "Quantidade"].sum())
-                val = df_vendas.loc[f, "Valor Total"].sum()
-                if qtd > 0:
-                    resumo.append({"Categoria": nome, "Quantidade": qtd, "Valor Total": f"R$ {val:,.2f}".replace(".", "X").replace(",", ".").replace("X", ",")})
+        for nome, cond in pratos.items():
+            f = df["Itens e Opções"].apply(cond)
+            qtd = int(df.loc[f, "Quantidade"].sum())
+            val = df.loc[f, "Valor Total"].sum()
+            if qtd > 0:
+                resumo.append({"Categoria": nome, "Quantidade": qtd, "Valor Total": f"R$ {val:,.2f}".replace(".", "X").replace(",", ".").replace("X", ",")})
+
+        for nome, cond in combos.items():
+            f = df["Itens e Opções"].apply(cond)
+            qtd = int(df.loc[f, "Quantidade"].sum())
+            val = df.loc[f, "Valor Total"].sum()
+            if qtd > 0:
+                resumo.append({"Categoria": nome, "Quantidade": qtd, "Valor Total": f"R$ {val:,.2f}".replace(".", "X").replace(",", ".").replace("X", ",")})
+
+        for nome, tags in refrigerantes.items():
+            f = df["Itens e Opções"].apply(lambda x: contem_tags(x, tags))
+            qtd = int(df.loc[f, "Quantidade"].sum())
+            val = df.loc[f, "Valor Total"].sum()
+            if qtd > 0:
+                resumo.append({"Categoria": nome, "Quantidade": qtd, "Valor Total": f"R$ {val:,.2f}".replace(".", "X").replace(",", ".").replace("X", ",")})
 
         resumo_df = pd.DataFrame(resumo)
-        resumo_df["Valor Num"] = resumo_df["Valor Total"].str.replace("R\$ ", "", regex=True).str.replace(".", "", regex=False).str.replace(",", ".").astype(float)
+        resumo_df["Valor Num"] = resumo_df["Valor Total"].str.replace("R\$ ", "", regex=True).str.replace(".", "", regex=False).str.replace(",", ".", regex=False).astype(float)
         resumo_df = resumo_df.sort_values(by="Valor Num", ascending=False).drop(columns="Valor Num")
 
         st.subheader("Resumo de Pequenos e Grandes")
