@@ -1,8 +1,8 @@
 import streamlit as st
 import pandas as pd
-import unidecode
-from io import BytesIO
 import re
+from io import BytesIO
+import unidecode
 
 st.set_page_config(page_title="Gestão de Restaurante", layout="wide")
 st.title("📊 Sistema de Gestão de Restaurante")
@@ -19,6 +19,7 @@ if file_consumo:
         if df.shape[1] < 12:
             st.error("⚠️ A planilha precisa conter as 3 seções (Estoque Inicial, Compras e Estoque Final) lado a lado.")
         else:
+            # Separando os dados conforme as colunas
             ini = df.iloc[:, :4].copy()
             compras = df.iloc[:, 4:8].copy()
             fim = df.iloc[:, 8:12].copy()
@@ -34,14 +35,15 @@ if file_consumo:
                 df["quantidade"] = pd.to_numeric(df["quantidade"], errors="coerce").fillna(0)
 
                 def ajustar_valor(valor):
+                    """ Função que ajusta o valor monetário para float """
                     if pd.isna(valor):
                         return 0.0
                     valor = str(valor)
-                    valor = re.sub(r"[^\d,]", "", valor)
+                    valor = re.sub(r"[^\d,]", "", valor)  # Remove caracteres não numéricos
                     if valor.count(",") == 1:
-                        valor = valor.replace(",", ".")
+                        valor = valor.replace(",", ".")  # Troca vírgula por ponto
                     else:
-                        valor = valor.replace(",", "")
+                        valor = valor.replace(",", "")  # Remove a vírgula caso seja separador de milhar
                     try:
                         return float(valor)
                     except:
@@ -54,6 +56,7 @@ if file_consumo:
             compras = limpar(compras)
             fim = limpar(fim)
 
+            # Merge dos dados de estoque inicial, compras e final
             base = pd.merge(ini, compras, on="item", how="outer", suffixes=("_ini", "_ent"))
             base = pd.merge(base, fim, on="item", how="outer")
             base = base.rename(columns={"quantidade": "quant_fim", "valor total": "total_fim"})
