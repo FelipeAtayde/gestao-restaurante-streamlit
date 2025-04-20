@@ -2,9 +2,6 @@ import streamlit as st
 import pandas as pd
 import unidecode
 from io import BytesIO
-import locale
-
-locale.setlocale(locale.LC_ALL, 'pt_BR.UTF-8')
 
 st.set_page_config(page_title="Gestão de Restaurante", layout="wide")
 st.title("📊 Sistema de Gestão de Restaurante")
@@ -36,16 +33,11 @@ if file_consumo:
                 df["item"] = df["item"].astype(str).str.lower().str.strip()
                 df["quantidade"] = pd.to_numeric(df["quantidade"], errors="coerce").fillna(0)
 
-                def converter_valor(valor):
-                    try:
-                        if isinstance(valor, str):
-                            valor = valor.replace("R$", "").strip()
-                            return locale.atof(valor)
-                        return float(valor)
-                    except:
-                        return 0.0
+                df["valor total"] = df["valor total"].astype(str)
+                df["valor total"] = df["valor total"].str.replace("[^0-9,]", "", regex=True)
+                df["valor total"] = df["valor total"].str.replace(".", "", regex=False).str.replace(",", ".")
+                df["valor total"] = pd.to_numeric(df["valor total"], errors="coerce").fillna(0)
 
-                df["valor total"] = df["valor total"].apply(converter_valor)
                 return df.groupby("item")[["quantidade", "valor total"]].sum().reset_index()
 
             ini = limpar(ini)
@@ -69,7 +61,15 @@ if file_consumo:
                 return [cor] * len(val)
 
             st.subheader("📦 Relatório de Consumo de Insumos")
-            st.dataframe(resultado.style.apply(destacar_top_5, axis=1).format({"quant_consumo": "{:.2f}", "total_consumo": "R$ {:.2f}"}), use_container_width=True)
+            st.dataframe(
+                resultado.style
+                    .apply(destacar_top_5, axis=1)
+                    .format({
+                        "quant_consumo": "{:.2f}",
+                        "total_consumo": lambda x: f"R$ {x:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+                    }),
+                use_container_width=True
+            )
 
             excel_consumo = BytesIO()
             resultado.to_excel(excel_consumo, index=False, engine='openpyxl')
@@ -77,6 +77,3 @@ if file_consumo:
 
     except Exception as e:
         st.error(f"Erro ao processar a planilha de consumo: {e}")
-
-# ========================== ANÁLISE DE VENDAS ==========================
-# [restante do código omitido por brevidade — pode ser colado aqui conforme necessário]
