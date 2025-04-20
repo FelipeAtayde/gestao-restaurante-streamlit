@@ -13,7 +13,7 @@ file_consumo = st.file_uploader("Faça upload da planilha de CONSUMO", type=["xl
 if file_consumo:
     try:
         # Leitura da planilha de consumo
-        df = pd.read_excel(file_consumo, header=None)  # Carregar sem cabeçalho
+        df = pd.read_excel(file_consumo, header=0)  # Carregar com o cabeçalho correto
 
         # Verificando as primeiras linhas da planilha
         st.write(df.head())
