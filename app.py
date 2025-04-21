@@ -6,19 +6,8 @@ from io import BytesIO
 st.set_page_config(page_title="Sistema de Análise de Vendas e Consumo de Estoque", layout="wide")
 st.title("📊 Sistema Integrado de Vendas e Consumo")
 
-# Função auxiliar para exportar para Excel
-
-def converte_para_excel_resumo(qtd_total, valor_total):
-    df = pd.DataFrame({
-        "Descrição": ["Quantidade Total Consumida", "Valor Total Gasto"],
-        "Valor": [qtd_total, f"R$ {valor_total:,.2f}"]
-    })
-    output = io.BytesIO()
-    with pd.ExcelWriter(output, engine='openpyxl') as writer:
-        df.to_excel(writer, index=False, sheet_name='Resumo')
-    return output.getvalue()
-
 # --------------------- AGENTE DE ANÁLISE DE VENDAS ---------------------
+
 st.header("🍽️ Análise de Maiores Vendas")
 file_vendas = st.file_uploader("Faça upload da planilha de VENDAS", type=["xlsx"], key="vendas")
 
@@ -115,3 +104,65 @@ if file_vendas:
     excel_vendas = BytesIO()
     resumo_df.to_excel(excel_vendas, index=False, engine='openpyxl')
     st.download_button("📅 Baixar Análise de Vendas (.xlsx)", data=excel_vendas.getvalue(), file_name="analise_maiores_vendas.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+
+# --------------------- AGENTE DE CONSUMO DE ESTOQUE ---------------------
+
+st.header("📦 Analisador de Consumo de Estoque")
+file_estoque = st.file_uploader("Faça upload da planilha de ESTOQUE", type=["xlsx"], key="estoque")
+
+if file_estoque:
+    xls = pd.ExcelFile(file_estoque)
+    df_raw = xls.parse(xls.sheet_names[0], header=None)
+
+    def extrair_bloco(df, start_row, col_start, col_end):
+        bloco = df.iloc[start_row:, col_start:col_end].copy()
+        bloco.columns = bloco.iloc[0]
+        bloco = bloco[1:]
+        bloco = bloco.dropna(subset=[bloco.columns[0]])
+        bloco.columns = ['Item', 'Qtd', 'VU', 'VT']
+        bloco['Item'] = bloco['Item'].astype(str).str.strip().str.upper()
+        bloco[['Qtd', 'VU', 'VT']] = bloco[['Qtd', 'VU', 'VT']].apply(pd.to_numeric, errors='coerce').fillna(0)
+        return bloco
+
+    ei = extrair_bloco(df_raw, 2, 0, 4)
+    c = extrair_bloco(df_raw, 2, 5, 9)
+    ef = extrair_bloco(df_raw, 2, 10, 14)
+
+    df = pd.merge(ei.groupby('Item', as_index=False).sum(),
+                  c.groupby('Item', as_index=False).sum(),
+                  on='Item', how='outer', suffixes=('_EI', '_C'))
+    df = pd.merge(df, ef.groupby('Item', as_index=False).sum(),
+                  on='Item', how='outer')
+    df = df.rename(columns={'Qtd': 'Qtd_EF', 'VU': 'VU_EF', 'VT': 'VT_EF'})
+    df = df.fillna(0)
+
+    df['Qtd_Consumida'] = df['Qtd_EI'] + df['Qtd_C'] - df['Qtd_EF']
+    df['Valor_Consumido'] = df['VT_EI'] + df['VT_C'] - df['VT_EF']
+
+    total_qtd = df['Qtd_Consumida'].sum()
+    total_valor = df['Valor_Consumido'].sum()
+
+    st.markdown("### Totais Gerais de Consumo")
+    st.markdown(f"**Quantidade Consumida:** {total_qtd:.2f}")
+    st.markdown(f"**Valor Total Gasto:** R$ {total_valor:,.2f}")
+
+    top5 = df.sort_values(by='Qtd_Consumida', ascending=False).head(5)
+    st.markdown("### 🟥 Top 5 Itens Mais Consumidos")
+    st.dataframe(top5.style.set_properties(**{'color': 'red'}), use_container_width=True)
+
+    def converte_para_excel_resumo(qtd_total, valor_total):
+        df_resumo = pd.DataFrame({
+            "Descrição": ["Quantidade Total Consumida", "Valor Total Gasto"],
+            "Valor": [qtd_total, f"R$ {valor_total:,.2f}"]
+        })
+        output = BytesIO()
+        with pd.ExcelWriter(output, engine='openpyxl') as writer:
+            df_resumo.to_excel(writer, index=False, sheet_name='Resumo')
+        return output.getvalue()
+
+    st.download_button(
+        label="📥 Baixar Relatório de Consumo (.xlsx)",
+        data=converte_para_excel_resumo(total_qtd, total_valor),
+        file_name="relatorio_consumo.xlsx",
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
