@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import io
+from io import BytesIO
 
 st.set_page_config(page_title="Sistema de Análise de Vendas e Consumo de Estoque", layout="wide")
 st.title("📊 Sistema Integrado de Vendas e Consumo")
@@ -18,108 +19,99 @@ def converte_para_excel_resumo(qtd_total, valor_total):
     return output.getvalue()
 
 # --------------------- AGENTE DE ANÁLISE DE VENDAS ---------------------
-st.subheader("🧾 Análise de Vendas")
-vendas_file = st.file_uploader("Envie a planilha de vendas", type=["xlsx"], key="vendas")
+st.header("🍽️ Análise de Maiores Vendas")
+file_vendas = st.file_uploader("Faça upload da planilha de VENDAS", type=["xlsx"], key="vendas")
 
-if vendas_file:
-    df_vendas = pd.read_excel(vendas_file)
+def normalizar(texto):
+    return str(texto).lower().strip()
 
-    df_vendas.columns = [col.strip().lower() for col in df_vendas.columns]
-    col_itens = next((col for col in df_vendas.columns if "item" in col and "op" in col), None)
+if file_vendas:
+    df_vendas = pd.read_excel(file_vendas, skiprows=3)
+    df_vendas["Itens e Opções"] = df_vendas["Itens e Opções"].astype(str).apply(normalizar)
 
-    if col_itens:
-        df_vendas = df_vendas.dropna(subset=[col_itens])
-        df_vendas[col_itens] = df_vendas[col_itens].astype(str).str.lower()
+    mult = {
+        "- 2 pequenos": 2, "- 3 pequenos": 3, "- 4 pequenos": 4,
+        "- 2 grandes": 2, "- 3 grandes": 3, "- 4 grandes": 4
+    }
+    for k, m in mult.items():
+        df_vendas.loc[df_vendas["Itens e Opções"].str.contains(k), "Quantidade"] *= m
 
-        def classificar(item):
-            if any(p in item for p in ['pequeno']): return 'PEQUENO'
-            if any(g in item for g in ['grande']): return 'GRANDE'
-            if any(r in item for r in ['guaraná', 'coca', 'refrigerante']): return 'BEBIDA'
-            if 'combo' in item: return 'COMBO'
-            return 'PRATO'
+    pequeno = df_vendas["Itens e Opções"].str.contains("pequeno") & ~df_vendas["Itens e Opções"].str.contains("combo")
+    grande = df_vendas["Itens e Opções"].str.contains("grande") & ~df_vendas["Itens e Opções"].str.contains("combo")
+    total_p = int(df_vendas.loc[pequeno, "Quantidade"].sum())
+    total_g = int(df_vendas.loc[grande, "Quantidade"].sum())
+    total_geral = total_p + total_g
 
-        df_vendas['categoria'] = df_vendas[col_itens].apply(classificar)
+    pratos = {
+        "Boi": lambda x: "boi" in x and "combo" not in x,
+        "Parmegiana": lambda x: "parmegiana" in x and "combo" not in x,
+        "Strogonoff": lambda x: "strogonoff" in x and "combo" not in x,
+        "Feijoada": lambda x: "feijoada" in x and "2 feijoadas" not in x,
+        "Tropeiro": lambda x: "tropeiro" in x and "tropeguete" not in x,
+        "Tropeguete": lambda x: "tropeguete" in x,
+        "Espaguete": lambda x: "espaguete" in x and "tropeguete" not in x,
+        "Porco": lambda x: "porco" in x and "combo" not in x,
+        "Frango": lambda x: "frango" in x and "parmegiana" not in x and "2 frangos + fritas" not in x
+    }
 
-        agrupado = df_vendas.groupby(['categoria', col_itens], as_index=False).agg({
-            'quantidade': 'sum',
-            'valor total': 'sum'
-        })
-        agrupado = agrupado.sort_values(by='valor total', ascending=False)
+    combos = {
+        "Combo Todo Dia": lambda x: "combo todo dia" in x,
+        "2 Pratos - À Sua Escolha": lambda x: "2 pratos" in x and "escolha" in x,
+        "Combo Supremo": lambda x: "combo supremo" in x,
+        "2 Feijoadas": lambda x: "2 feijoadas" in x,
+        "2 Frangos + Fritas": lambda x: "2 frangos" in x and "fritas" in x
+    }
 
-        pequenos = df_vendas[df_vendas['categoria'] == 'PEQUENO']['quantidade'].sum()
-        grandes = df_vendas[df_vendas['categoria'] == 'GRANDE']['quantidade'].sum()
-        total = pequenos + grandes
+    refrigerantes = {
+        "Coca-Cola Original 350 ml": [["coca", "original", "350"]],
+        "Coca-Cola Zero e Sem Açúcar 350 ml": [["coca", "zero", "350"], ["coca", "sem acucar", "350"]],
+        "Coca-Cola Original 600 ml": [["coca", "original", "600"]],
+        "Coca-Cola Zero 600 ml": [["coca", "zero", "600"], ["coca", "sem acucar", "600"]],
+        "Coca-Cola 2 Litros": [["coca", "2l"], ["coca", "2 l"], ["coca", "2litro"]],
+        "Guaraná Antarctica 350 ml": [["guarana", "350"]],
+        "Guaraná Antarctica 1 Litro": [["guarana", "antarctica", "1l"], ["guarana", "antarctica", "1 l"], ["guarana", "antarctica", "1litro"]],
+        "Guaraná Antarctica 2 Litros": [["guarana", "2l"], ["guarana", "2 l"], ["guarana", "2litro"]],
+        "Suco": [["suco"]],
+        "Refrigerante Mate Couro 1 Litro": [["mate couro", "1l"], ["guarana mate", "1l"], ["mate couro", "1 l"], ["guarana mate", "1 l"], ["mate couro", "1litro"], ["guarana mate", "1litro"]]
+    }
 
-        st.markdown(f"### Totais Gerais")
-        st.markdown(f"**Pequenos:** {pequenos:.0f} | **Grandes:** {grandes:.0f} | **Total:** {total:.0f}")
+    def contem_tags(texto, listas):
+        return any(all(tag in texto for tag in tags) for tags in listas)
 
-        st.markdown("### Detalhamento por Item")
-        st.dataframe(agrupado, use_container_width=True)
+    resumo = []
+    for nome, cond in pratos.items():
+        f = df_vendas["Itens e Opções"].apply(cond)
+        qtd = int(df_vendas.loc[f, "Quantidade"].sum())
+        val = df_vendas.loc[f, "Valor Total"].sum()
+        if qtd > 0:
+            resumo.append({"Categoria": nome, "Quantidade": qtd, "Valor Total": f"R$ {val:,.2f}".replace(".", "X").replace(",", ".").replace("X", ",")})
 
-        st.download_button(
-            label="💾 Baixar Relatório em Excel",
-            data=converte_para_excel_resumo(total, agrupado['valor total'].sum()),
-            file_name="relatorio_vendas.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-        )
-    else:
-        st.error("A planilha precisa conter uma coluna com os nomes dos itens e opções.")
+    for nome, cond in combos.items():
+        f = df_vendas["Itens e Opções"].apply(cond)
+        qtd = int(df_vendas.loc[f, "Quantidade"].sum())
+        val = df_vendas.loc[f, "Valor Total"].sum()
+        if qtd > 0:
+            resumo.append({"Categoria": nome, "Quantidade": qtd, "Valor Total": f"R$ {val:,.2f}".replace(".", "X").replace(",", ".").replace("X", ",")})
 
-# --------------------- AGENTE DE CONSUMO DE ESTOQUE ---------------------
-st.subheader("📊 Relatório de Consumo de Estoque")
-uploaded_file = st.file_uploader("Envie a planilha de estoque", type=["xlsx"], key="estoque")
+    for nome, tags in refrigerantes.items():
+        f = df_vendas["Itens e Opções"].apply(lambda x: contem_tags(x, tags))
+        qtd = int(df_vendas.loc[f, "Quantidade"].sum())
+        val = df_vendas.loc[f, "Valor Total"].sum()
+        if qtd > 0:
+            resumo.append({"Categoria": nome, "Quantidade": qtd, "Valor Total": f"R$ {val:,.2f}".replace(".", "X").replace(",", ".").replace("X", ",")})
 
-if uploaded_file:
-    xls = pd.ExcelFile(uploaded_file)
-    df_raw = xls.parse(xls.sheet_names[0], header=None)
+    resumo_df = pd.DataFrame(resumo)
+    resumo_df["Valor Num"] = resumo_df["Valor Total"].str.replace("R\$ ", "", regex=True).str.replace(".", "", regex=False).str.replace(",", ".", regex=False).astype(float)
+    resumo_df = resumo_df.sort_values(by="Valor Num", ascending=False).drop(columns="Valor Num")
 
-    estoque_inicial = df_raw.iloc[2:, 0:4]
-    compras = df_raw.iloc[2:, 5:9]
-    estoque_final = df_raw.iloc[2:, 10:14]
+    st.subheader("Resumo de Pequenos e Grandes")
+    st.write(f"Pequeno: {total_p}")
+    st.write(f"Grande: {total_g}")
+    st.write(f"Total: {total_geral}")
 
-    estoque_inicial.columns = ['Item', 'Qtd_EI', 'VU_EI', 'VT_EI']
-    compras.columns = ['Item', 'Qtd_C', 'VU_C', 'VT_C']
-    estoque_final.columns = ['Item', 'Qtd_EF', 'VU_EF', 'VT_EF']
+    st.subheader("📋 Resumo Final Agrupado")
+    st.dataframe(resumo_df, use_container_width=True)
 
-    def normaliza(df):
-        df = df.dropna(subset=['Item'])
-        df['Item'] = df['Item'].astype(str).str.strip().str.upper()
-        return df
-
-    estoque_inicial = normaliza(estoque_inicial)
-    compras = normaliza(compras)
-    estoque_final = normaliza(estoque_final)
-
-    def agrupar(df, qtd_col, valor_col):
-        return df.groupby('Item', as_index=False)[[qtd_col, valor_col]].sum()
-
-    ei = agrupar(estoque_inicial, 'Qtd_EI', 'VT_EI')
-    c = agrupar(compras, 'Qtd_C', 'VT_C')
-    ef = agrupar(estoque_final, 'Qtd_EF', 'VT_EF')
-
-    df = pd.merge(ei, c, on='Item', how='outer')
-    df = pd.merge(df, ef, on='Item', how='outer')
-    df = df.fillna(0)
-
-    df['Qtd_Consumida'] = df['Qtd_EI'] + df['Qtd_C'] - df['Qtd_EF']
-    df['Valor_Consumido'] = df['VT_EI'] + df['VT_C'] - df['VT_EF']
-
-    total_qtd = df['Qtd_Consumida'].sum()
-    total_valor = df['Valor_Consumido'].sum()
-
-    st.markdown("### Totais Gerais de Consumo")
-    st.markdown(f"**Quantidade Consumida:** {total_qtd:.2f}")
-    st.markdown(f"**Valor Total Gasto:** R$ {total_valor:,.2f}")
-
-    top5 = df.sort_values(by='Qtd_Consumida', ascending=False).head(5)
-    st.markdown("### 🟥 Top 5 Itens Mais Consumidos")
-    st.dataframe(top5.style.set_properties(**{'color': 'red'}), use_container_width=True)
-
-    st.download_button(
-        label="💾 Baixar Resumo em Excel",
-        data=converte_para_excel_resumo(total_qtd, total_valor),
-        file_name="relatorio_consumo.xlsx",
-        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-    )
-else:
-    st.info("Por favor, envie a planilha para iniciar a análise.")
+    excel_vendas = BytesIO()
+    resumo_df.to_excel(excel_vendas, index=False, engine='openpyxl')
+    st.download_button("📅 Baixar Análise de Vendas (.xlsx)", data=excel_vendas.getvalue(), file_name="analise_maiores_vendas.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
