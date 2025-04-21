@@ -120,6 +120,8 @@ if file_vendas:
 # ========================== AGENTE DE CONSUMO ==========================
 st.header("📦 Analisador de Consumo de Estoque")
 
+
+
 file = st.file_uploader("📤 Envie sua planilha de estoque .xlsx", type=["xlsx"], key="estoque")
 
 if file:
@@ -131,7 +133,7 @@ if file:
             return 'color: red' if val in top5["Valor consumido"].values else 'color: black'
         st.dataframe(resultado.style.applymap(destaque, subset=["Valor consumido"]))
         now = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-        historico_path = os.path.join(HIST_DIR, f"consumo_{now}.xlsx")
+        historico_path = os.path.join("historico_relatorios", f"consumo_{now}.xlsx")
         exportar_excel_formatado(resultado, historico_path)
         with open(historico_path, "rb") as f:
             st.download_button(
