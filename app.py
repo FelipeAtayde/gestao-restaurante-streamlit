@@ -120,7 +120,8 @@ if file_vendas:
 # ========================== AGENTE DE CONSUMO ==========================
 st.header("📦 Analisador de Consumo de Estoque")
 
-# (Removido: segunda chamada incorreta para evitar erro de chamada antecipada da função)
+file = st.file_uploader("📤 Envie sua planilha de estoque .xlsx", type=["xlsx"], key="estoque")
+
     if resultado is not None:
         st.success("✅ Análise concluída com sucesso!")
         top5 = resultado.nlargest(5, "Valor consumido")
