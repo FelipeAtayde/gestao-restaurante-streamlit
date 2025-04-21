@@ -100,6 +100,7 @@ if file_vendas:
             resumo.append({"Categoria": nome, "Quantidade": qtd, "Valor Total": val})
 
     resumo_df = pd.DataFrame(resumo)
+    resumo_df = resumo_df.sort_values(by="Valor Total", ascending=False)
     top5 = resumo_df.nlargest(5, "Valor Total")
     def azul_escuro(val):
         return 'color: #003366' if val in top5["Valor Total"].values else 'color: black'
@@ -119,80 +120,7 @@ if file_vendas:
 # ========================== AGENTE DE CONSUMO ==========================
 st.header("📦 Analisador de Consumo de Estoque")
 
-file = st.file_uploader("📤 Envie sua planilha de estoque .xlsx", type=["xlsx"], key="estoque")
-st.markdown("Faça upload da planilha Excel com colunas horizontais para obter o relatório de consumo.")
-
-HIST_DIR = "historico_relatorios"
-os.makedirs(HIST_DIR, exist_ok=True)
-
-def normalizar_nome(nome):
-    if pd.isna(nome): return ""
-    return unidecode(str(nome)).strip().lower()
-
-def extrair_valor(valor):
-    if pd.isna(valor): return 0.0
-    valor_str = str(valor).replace("R$", "").replace(" ", "").strip()
-    valor_str = re.sub(r"[^0-9,\.]+", "", valor_str)
-    if "," in valor_str and "." in valor_str:
-        if valor_str.rfind(",") > valor_str.rfind("."):
-            valor_str = valor_str.replace(".", "").replace(",", ".")
-        else:
-            valor_str = valor_str.replace(",", "")
-    elif "," in valor_str:
-        valor_str = valor_str.replace(",", ".")
-    try:
-        return float(valor_str)
-    except:
-        return 0.0
-
-def detectar_unidade(item):
-    item = item.lower()
-    if any(x in item for x in ["kg", "quilo", "grama", "g"]): return "KG"
-    elif any(x in item for x in ["litro", "ml"]): return "L"
-    elif any(x in item for x in ["caixa", "pct", "pacote"]): return "PCT"
-    else: return "UN"
-
-def extrair_bloco_horizontal(df, col_inicio, col_fim):
-    dados = []
-    for i in range(1, len(df)):
-        linha = df.iloc[i, col_inicio:col_fim].tolist()
-        if len(linha) >= 4 and pd.notna(linha[0]):
-            item = normalizar_nome(linha[0])
-            try:
-                qtd = extrair_valor(linha[1])
-                val = extrair_valor(linha[3])
-                if item:
-                    dados.append({'Item': item, 'Quantidade': qtd, 'Valor total': val})
-            except:
-                continue
-    return pd.DataFrame(dados)
-
-def exportar_excel_formatado(df, path):
-    df.to_excel(path, index=False)
-    wb = openpyxl.load_workbook(path)
-    ws = wb.active
-    for column_cells in ws.columns:
-        max_length = 0
-        column = column_cells[0].column_letter
-        for cell in column_cells:
-            try:
-                if cell.value:
-                    max_length = max(max_length, len(str(cell.value)))
-            except:
-                pass
-        ws.column_dimensions[column].width = max_length + 2
-    col_idx = [cell.column for cell in ws[1] if cell.value == "Valor consumido"]
-    if col_idx:
-        col_letter = get_column_letter(col_idx[0])
-        top5_vals = df.nlargest(5, "Valor consumido")["Valor consumido"].tolist()
-        for row in range(2, len(df)+2):
-            cell = ws[f"{col_letter}{row}"]
-            if cell.value in top5_vals:
-                cell.font = Font(color="FF0000")
-    wb.save(path)
-
-if file:
-    resultado = analisar_consumo_estoque(file)
+# (Removido: segunda chamada incorreta para evitar erro de chamada antecipada da função)
     if resultado is not None:
         st.success("✅ Análise concluída com sucesso!")
         top5 = resultado.nlargest(5, "Valor consumido")
