@@ -57,7 +57,7 @@ if uploaded_file:
     # Download Excel
     def converte_para_excel(df):
         output = io.BytesIO()
-        with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+        with pd.ExcelWriter(output, engine='openpyxl') as writer:
             df.to_excel(writer, index=False, sheet_name='Consumo')
         return output.getvalue()
 
