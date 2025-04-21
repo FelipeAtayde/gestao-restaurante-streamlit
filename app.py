@@ -122,6 +122,8 @@ st.header("📦 Analisador de Consumo de Estoque")
 
 file = st.file_uploader("📤 Envie sua planilha de estoque .xlsx", type=["xlsx"], key="estoque")
 
+if file:
+    resultado = analisar_consumo_estoque(file)
     if resultado is not None:
         st.success("✅ Análise concluída com sucesso!")
         top5 = resultado.nlargest(5, "Valor consumido")
