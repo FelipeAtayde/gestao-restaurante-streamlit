@@ -1,54 +1,72 @@
-import pandas as pd
 import streamlit as st
-from io import BytesIO
+import pandas as pd
+import io
 
-# Configuração da página
-st.set_page_config(page_title="Gestão de Restaurante", layout="wide")
-st.title("📊 Sistema de Gestão de Restaurante")
+st.set_page_config(page_title="Agente de Consumo de Estoque", layout="wide")
+st.title("📊 Relatório de Consumo de Estoque")
 
-# ========================== AGENTE DE CONSUMO ==========================
-st.header("📉 Análise de Consumo de Estoque")
-file_consumo = st.file_uploader("Faça upload da planilha de CONSUMO", type=["xlsx"], key="consumo")
+uploaded_file = st.file_uploader("Envie a planilha no formato original", type=["xlsx"])
 
-if file_consumo:
-    try:
-        # Leitura da planilha de consumo
-        df = pd.read_excel(file_consumo, header=0)  # Carregar com o cabeçalho correto
+if uploaded_file:
+    # Leitura da planilha
+    xls = pd.ExcelFile(uploaded_file)
+    df_raw = xls.parse(xls.sheet_names[0], header=None)
 
-        # Verificando as primeiras linhas da planilha
-        st.write(df.head())
+    # Definindo os blocos
+    estoque_inicial = df_raw.iloc[2:, 0:4]
+    compras = df_raw.iloc[2:, 5:9]
+    estoque_final = df_raw.iloc[2:, 10:14]
 
-        # Renomeando as colunas com base na estrutura que você forneceu
-        df.columns = [
-            "ITEM", "QUANTIDADE_INICIAL", "VALOR_UNITARIO_INICIAL", "VALOR_TOTAL_INICIAL",  # Colunas do estoque inicial
-            "ITEM_COMPRAS", "QUANTIDADE_COMPRAS", "VALOR_UNITARIO_COMPRAS", "VALOR_TOTAL_COMPRAS",  # Colunas de compras
-            "ITEM_FINAL", "QUANTIDADE_FINAL", "VALOR_UNITARIO_FINAL", "VALOR_TOTAL_FINAL"  # Colunas do estoque final
-        ]
+    estoque_inicial.columns = ['Item', 'Qtd_EI', 'VU_EI', 'VT_EI']
+    compras.columns = ['Item', 'Qtd_C', 'VU_C', 'VT_C']
+    estoque_final.columns = ['Item', 'Qtd_EF', 'VU_EF', 'VT_EF']
 
-        # Agora, vamos remover linhas em branco e garantir que o processamento seja feito com números
-        df = df.dropna(how="all")
+    # Padronizar nomes
+    def normaliza(df):
+        df = df.dropna(subset=['Item'])
+        df['Item'] = df['Item'].astype(str).str.strip().str.upper()
+        return df
 
-        # Convertendo valores numéricos para garantir que podemos realizar cálculos
-        df["QUANTIDADE_INICIAL"] = pd.to_numeric(df["QUANTIDADE_INICIAL"], errors="coerce").fillna(0)
-        df["VALOR_TOTAL_INICIAL"] = pd.to_numeric(df["VALOR_TOTAL_INICIAL"], errors="coerce").fillna(0)
-        df["QUANTIDADE_COMPRAS"] = pd.to_numeric(df["QUANTIDADE_COMPRAS"], errors="coerce").fillna(0)
-        df["VALOR_TOTAL_COMPRAS"] = pd.to_numeric(df["VALOR_TOTAL_COMPRAS"], errors="coerce").fillna(0)
-        df["QUANTIDADE_FINAL"] = pd.to_numeric(df["QUANTIDADE_FINAL"], errors="coerce").fillna(0)
-        df["VALOR_TOTAL_FINAL"] = pd.to_numeric(df["VALOR_TOTAL_FINAL"], errors="coerce").fillna(0)
+    estoque_inicial = normaliza(estoque_inicial)
+    compras = normaliza(compras)
+    estoque_final = normaliza(estoque_final)
 
-        # Calculando o consumo
-        df["QUANT_CONSUMO"] = df["QUANTIDADE_INICIAL"] + df["QUANTIDADE_COMPRAS"] - df["QUANTIDADE_FINAL"]
-        df["TOTAL_CONSUMO"] = df["VALOR_TOTAL_INICIAL"] + df["VALOR_TOTAL_COMPRAS"] - df["VALOR_TOTAL_FINAL"]
+    # Agrupar somando por item (caso repetido)
+    def agrupar(df, qtd_col, valor_col):
+        return df.groupby('Item', as_index=False)[[qtd_col, valor_col]].sum()
 
-        # Exibindo o relatório de consumo
-        st.subheader("📊 Relatório de Consumo de Insumos")
-        df_resultado = df[["ITEM", "QUANT_CONSUMO", "TOTAL_CONSUMO"]]
-        st.dataframe(df_resultado, use_container_width=True)
+    ei = agrupar(estoque_inicial, 'Qtd_EI', 'VT_EI')
+    c = agrupar(compras, 'Qtd_C', 'VT_C')
+    ef = agrupar(estoque_final, 'Qtd_EF', 'VT_EF')
 
-        # Baixar o arquivo de consumo
-        excel_consumo = BytesIO()
-        df_resultado.to_excel(excel_consumo, index=False, engine='openpyxl')
-        st.download_button("💾 Baixar Relatório de Consumo (.xlsx)", data=excel_consumo.getvalue(), file_name="relatorio_consumo.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+    # Unificar dados
+    df = pd.merge(ei, c, on='Item', how='outer')
+    df = pd.merge(df, ef, on='Item', how='outer')
+    df = df.fillna(0)
 
-    except Exception as e:
-        st.error(f"Erro ao processar a planilha de consumo: {e}")
+    # Cálculo do consumo
+    df['Qtd_Consumida'] = df['Qtd_EI'] + df['Qtd_C'] - df['Qtd_EF']
+    df['Valor_Consumido'] = df['VT_EI'] + df['VT_C'] - df['VT_EF']
+
+    df = df[['Item', 'Qtd_EI', 'Qtd_C', 'Qtd_EF', 'Qtd_Consumida', 'Valor_Consumido']]
+    df = df.sort_values(by='Valor_Consumido', ascending=False).reset_index(drop=True)
+
+    st.subheader("📋 Relatório Final")
+    st.dataframe(df, use_container_width=True)
+
+    # Download Excel
+    def converte_para_excel(df):
+        output = io.BytesIO()
+        with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+            df.to_excel(writer, index=False, sheet_name='Consumo')
+        return output.getvalue()
+
+    st.download_button(
+        label="💾 Baixar Relatório em Excel",
+        data=converte_para_excel(df),
+        file_name="relatorio_consumo.xlsx",
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
+
+else:
+    st.info("Por favor, envie a planilha para iniciar a análise.")
