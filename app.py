@@ -244,8 +244,7 @@ def analisar_consumo_estoque(file):
             'Item': item,
             'Quantidade consumida': round(qtd_consumida, 2),
             'Valor consumido': round(val_consumido, 2),
-            'Unidade': unidade
-        })
+            })
 
     resultado_df = pd.DataFrame(resultado)
     resultado_df = resultado_df.sort_values(by="Valor consumido", ascending=False)
