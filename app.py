@@ -122,66 +122,7 @@ st.header("📦 Analisador de Consumo de Estoque")
 
 
 
-file = st.file_uploader("📤 Envie sua planilha de estoque .xlsx", type=["xlsx"], key="estoque")
-
-def analisar_consumo_estoque(file):
-    df = pd.read_excel(file, sheet_name=0, header=None)
-    colunas = df.iloc[0].astype(str).apply(lambda x: unidecode(str(x)).strip().lower())
-
-    col_estoque_ini_idx = colunas[colunas.str.contains("estoque.*inicial")]
-    col_compras_idx = colunas[colunas.str.contains("compras")]
-    col_estoque_fim_idx = colunas[colunas.str.contains("estoque.*final")]
-
-    if col_estoque_ini_idx.empty or col_compras_idx.empty or col_estoque_fim_idx.empty:
-        st.error("❌ Não foi possível localizar os blocos de dados. Verifique os títulos da planilha.")
-        return None
-
-    col_estoque_ini = col_estoque_ini_idx.index[0]
-    col_compras = col_compras_idx.index[0]
-    col_estoque_fim = col_estoque_fim_idx.index[0]
-
-    estoque_inicial = extrair_bloco_horizontal(df, col_estoque_ini, col_compras)
-    compras = extrair_bloco_horizontal(df, col_compras, col_estoque_fim)
-    estoque_final = extrair_bloco_horizontal(df, col_estoque_fim, col_estoque_fim + 4)
-
-    def agrupar(df):
-        return df.groupby('Item', as_index=False).agg({'Quantidade': 'sum', 'Valor total': 'sum'})
-
-    estoque_inicial = agrupar(estoque_inicial)
-    compras = agrupar(compras)
-    estoque_final = agrupar(estoque_final)
-
-    ini_qtd = dict(zip(estoque_inicial['Item'], estoque_inicial['Quantidade']))
-    ini_val = dict(zip(estoque_inicial['Item'], estoque_inicial['Valor total']))
-    comp_qtd = dict(zip(compras['Item'], compras['Quantidade']))
-    comp_val = dict(zip(compras['Item'], compras['Valor total']))
-    fin_qtd = dict(zip(estoque_final['Item'], estoque_final['Quantidade']))
-    fin_val = dict(zip(estoque_final['Item'], estoque_final['Valor total']))
-
-    itens_ordem = list(set(list(ini_qtd.keys()) + list(comp_qtd.keys()) + list(fin_qtd.keys())))
-    resultado = []
-
-    for item in itens_ordem:
-        if item.strip() == "" or item.lower() == "item": continue
-        qtd_ini = ini_qtd.get(item, 0)
-        qtd_comp = comp_qtd.get(item, 0)
-        qtd_fin = fin_qtd.get(item, 0)
-        val_ini = ini_val.get(item, 0)
-        val_comp = comp_val.get(item, 0)
-        val_fin = fin_val.get(item, 0)
-        qtd_consumida = qtd_ini + qtd_comp - qtd_fin
-        val_consumido = val_ini + val_comp - val_fin
-        if qtd_consumida == 0 and val_consumido == 0: continue
-        unidade = detectar_unidade(item)
-        resultado.append({
-            'Item': item,
-            'Quantidade consumida': round(qtd_consumida, 2),
-            'Valor consumido': round(val_consumido, 2),
-            'Unidade': unidade
-        })
-
-    resultado_df = pd.DataFrame(resultado)
-    resultado_df = resultado_df.sort_values(by="Valor consumido", ascending=False)
+do_df.sort_values(by="Valor consumido", ascending=False)
     top5 = resultado_df.nlargest(5, "Valor consumido")
 
     def destaque(val):
