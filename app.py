@@ -118,6 +118,8 @@ if file_vendas:
 
 # ========================== AGENTE DE CONSUMO ==========================
 st.header("📦 Analisador de Consumo de Estoque")
+
+file = st.file_uploader("📤 Envie sua planilha de estoque .xlsx", type=["xlsx"], key="estoque")
 st.markdown("Faça upload da planilha Excel com colunas horizontais para obter o relatório de consumo.")
 
 HIST_DIR = "historico_relatorios"
@@ -188,6 +190,25 @@ def exportar_excel_formatado(df, path):
             if cell.value in top5_vals:
                 cell.font = Font(color="FF0000")
     wb.save(path)
+
+if file:
+    resultado = analisar_consumo_estoque(file)
+    if resultado is not None:
+        st.success("✅ Análise concluída com sucesso!")
+        top5 = resultado.nlargest(5, "Valor consumido")
+        def destaque(val):
+            return 'color: red' if val in top5["Valor consumido"].values else 'color: black'
+        st.dataframe(resultado.style.applymap(destaque, subset=["Valor consumido"]))
+        now = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+        historico_path = os.path.join(HIST_DIR, f"consumo_{now}.xlsx")
+        exportar_excel_formatado(resultado, historico_path)
+        with open(historico_path, "rb") as f:
+            st.download_button(
+                label="⬇️ Baixar relatório Excel",
+                data=f,
+                file_name="relatorio_consumo.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            )
 
 def analisar_consumo_estoque(file):
     df = pd.read_excel(file, sheet_name=0, header=None)
